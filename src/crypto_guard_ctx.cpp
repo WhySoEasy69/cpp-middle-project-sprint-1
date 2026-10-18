@@ -45,7 +45,13 @@ using EvpCipherCtxPtr =
 
 class CryptoGuardCtx::Impl {
 public:
-    Impl() : evpCtxPtr_(EVP_CIPHER_CTX_new()) { OpenSSL_add_all_algorithms(); }
+    Impl() : evpCtxPtr_(EVP_CIPHER_CTX_new()) {
+        if (!evpCtxPtr_) {
+            throw std::runtime_error("failed to create EVP_CIPHER_CTX");
+        }
+
+        OpenSSL_add_all_algorithms();
+    }
 
     ~Impl() { EVP_cleanup(); }
 
