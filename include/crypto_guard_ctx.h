@@ -22,7 +22,7 @@ public:
 
     void Decrypt(std::istream &inStream, std::ostream &outStream, std::string_view password);
 
-    std::string CalculateChecksum(std::istream &inStream);
+    std::string CalculateChecksum(std::istream &inStream) const;
 
 private:
     class Impl;
