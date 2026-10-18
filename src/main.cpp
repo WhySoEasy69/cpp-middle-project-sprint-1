@@ -8,31 +8,55 @@
 #include <stdexcept>
 #include <string>
 
-struct AesCipherParams {
-    static const size_t KEY_SIZE = 32;             // AES-256 key size
-    static const size_t IV_SIZE = 16;              // AES block size (IV length)
-    const EVP_CIPHER *cipher = EVP_aes_256_cbc();  // Cipher algorithm
+void ProcessCryptoCommand(CryptoGuard::ProgramOptions::COMMAND_TYPE type) {
+    using COMMAND_TYPE = CryptoGuard::ProgramOptions::COMMAND_TYPE;
+    switch (type) {
+    case COMMAND_TYPE::ENCRYPT:
+        std::print("File encoded successfully\n");
+        break;
 
-    int encrypt;                              // 1 for encryption, 0 for decryption
-    std::array<unsigned char, KEY_SIZE> key;  // Encryption key
-    std::array<unsigned char, IV_SIZE> iv;    // Initialization vector
-};
+    case COMMAND_TYPE::DECRYPT:
+        std::print("File decoded successfully\n");
+        break;
 
-AesCipherParams CreateChiperParamsFromPassword(std::string_view password) {
-    AesCipherParams params;
-    constexpr std::array<unsigned char, 8> salt = {'1', '2', '3', '4', '5', '6', '7', '8'};
+    case COMMAND_TYPE::CHECKSUM:
+        std::print("Checksum: {}\n", "CHECKSUM_NOT_IMPLEMENTED");
+        break;
 
-    int result = EVP_BytesToKey(params.cipher, EVP_sha256(), salt.data(),
-                                reinterpret_cast<const unsigned char *>(password.data()), password.size(), 1,
-                                params.key.data(), params.iv.data());
-
-    if (result == 0) {
-        throw std::runtime_error{"Failed to create a key from password"};
+    default:
+        throw std::runtime_error{"Unsupported command"};
     }
-
-    return params;
 }
 
+void Process(const CryptoGuard::ProgramOptions &options) {
+    if (options.IsHelpRequested()) {
+        options.PrintHelpInfo();
+    }
+    else {
+        // TODO: how to process when case, when help specified with other params
+        ProcessCryptoCommand(options.GetCommand());
+    }
+}
+
+int main(int argc, char *argv[]) {
+    try {
+        CryptoGuard::ProgramOptions options;
+        options.Parse(argc, argv);
+
+        Process(options);
+
+    } catch (const std::exception &e) {
+        std::print(std::cerr, "Error: {}\n", e.what());
+        return 1;
+    } catch (...) {
+        std::print(std::cerr, "Unknown error occurred");
+        return 1;
+    }
+
+    return 0;
+}
+
+/*
 int main(int argc, char *argv[]) {
     try {
         //
@@ -105,7 +129,11 @@ int main(int argc, char *argv[]) {
     } catch (const std::exception &e) {
         std::print(std::cerr, "Error: {}\n", e.what());
         return 1;
+    } catch (...) {
+        std::print(std::cerr, "Unknown error occurred");
+        return 1;
     }
 
     return 0;
 }
+*/
