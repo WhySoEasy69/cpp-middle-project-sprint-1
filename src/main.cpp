@@ -31,8 +31,7 @@ void ProcessCryptoCommand(CryptoGuard::ProgramOptions::COMMAND_TYPE type) {
 void Process(const CryptoGuard::ProgramOptions &options) {
     if (options.IsHelpRequested()) {
         options.PrintHelpInfo();
-    }
-    else {
+    } else {
         // TODO: how to process when case, when help specified with other params
         ProcessCryptoCommand(options.GetCommand());
     }

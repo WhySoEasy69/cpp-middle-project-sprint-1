@@ -1,7 +1,8 @@
 #pragma once
 
-#include <string>
+#include <iostream>
 #include <memory>
+#include <string>
 
 namespace CryptoGuard {
 
@@ -17,13 +18,11 @@ public:
     CryptoGuardCtx &operator=(CryptoGuardCtx &&) noexcept = default;
 
     // API
-    void EncryptFile(std::iostream &inStream, 
-        std::iostream &outStream, std::string_view password);
+    void Encrypt(std::istream &inStream, std::ostream &outStream, std::string_view password);
 
-    void DecryptFile(std::iostream &inStream, 
-        std::iostream &outStream, std::string_view password);
+    void Decrypt(std::istream &inStream, std::ostream &outStream, std::string_view password);
 
-    std::string CalculateChecksum(std::iostream &inStream);
+    std::string CalculateChecksum(std::istream &inStream);
 
 private:
     class Impl;
