@@ -17,7 +17,7 @@ public:
         CHECKSUM,
     };
 
-    void Parse(int argc, const char* const* argv);
+    void Parse(int argc, const char *const *argv);
 
     bool IsHelpRequested() const { return isHelpRequested_; }
     void PrintHelpInfo() const { desc_.print(std::cout); }
