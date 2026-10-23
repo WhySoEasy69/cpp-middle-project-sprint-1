@@ -72,7 +72,6 @@ void ProgramOptions::Validate(const po::variables_map &vm) {
         requiredOptionsForCommand = {"input", "output", "password", "command"};
     }
 
-    // TODO: implement enum for command line arguments
     auto specifiedOptionsCount = 0;
     for (const auto &option : requiredOptionsForCommand) {
         if (vm.count(option) != 0) {

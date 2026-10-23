@@ -122,7 +122,7 @@ private:
                                 CRYPTO_OPERATION_TYPE type) {
         auto opStr = GetCryptoOperationTypeStr(type);
 
-        if (!inStream) {
+        if (!inStream.good()) {
             throw std::invalid_argument(opStr + " failed: Invalid input stream argument");
         } else if (!outStream) {
             throw std::invalid_argument(opStr + " failed: Invalid outstream argument");
@@ -136,25 +136,30 @@ private:
             EVP_CipherInit_ex(evpCtxPtr_.get(), params.cipher, nullptr, params.key.data(), params.iv.data(), enc);
         checkOpensslOpcode(opStr + " EVP_CipherInit_ex failed: ", opcode);
 
-        // TODO: read and process data by chunks
-        // TODO: replace implicit char to unsigned chars conversions ?
-        std::vector<unsigned char> inBuf;
-        std::copy(std::istreambuf_iterator<char>(inStream), std::istreambuf_iterator<char>(),
-                  std::back_inserter(inBuf));
+        const auto buffSizeForCrypto = EVP_CIPHER_CTX_block_size(evpCtxPtr_.get());
 
-        std::vector<unsigned char> outBuf(inBuf.size() + EVP_MAX_BLOCK_LENGTH);
-        int outLen;
+        while (inStream.good()) {
+            std::vector<unsigned char> inBuf(buffSizeForCrypto);
+            inStream.read(reinterpret_cast<char *>(inBuf.data()), inBuf.size());
+            auto readCount = inStream.gcount();
 
-        opcode =
-            EVP_CipherUpdate(evpCtxPtr_.get(), outBuf.data(), &outLen, inBuf.data(), static_cast<int>(inBuf.size()));
-        checkOpensslOpcode(opStr + " EVP_CipherUpdate failed: ", opcode);
+            std::vector<unsigned char> outBuf(inBuf.size() + EVP_MAX_BLOCK_LENGTH);
+            int outLen;
 
+            opcode =
+                EVP_CipherUpdate(evpCtxPtr_.get(), outBuf.data(), &outLen, inBuf.data(), static_cast<int>(readCount));
+            checkOpensslOpcode(opStr + " EVP_CipherUpdate failed: ", opcode);
+
+            std::copy(outBuf.begin(), std::next(outBuf.begin(), outLen), std::ostreambuf_iterator<char>(outStream));
+        }
+
+        std::vector<unsigned char> outBuf(EVP_MAX_BLOCK_LENGTH);
         int finalLen;
-        opcode = EVP_CipherFinal_ex(evpCtxPtr_.get(), outBuf.data() + outLen, &finalLen);
+
+        opcode = EVP_CipherFinal_ex(evpCtxPtr_.get(), outBuf.data(), &finalLen);
         checkOpensslOpcode(opStr + " EVP_CipherFinal_ex failed: ", opcode);
 
-        const auto len = outLen + finalLen;
-        std::copy(outBuf.begin(), std::next(outBuf.begin(), len), std::ostreambuf_iterator<char>(outStream));
+        std::copy(outBuf.begin(), std::next(outBuf.begin(), finalLen), std::ostreambuf_iterator<char>(outStream));
     }
 
     void checkOpensslOpcode(const std::string &errContextInfo, int opcode) const {
