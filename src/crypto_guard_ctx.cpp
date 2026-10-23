@@ -8,7 +8,7 @@
 #include <memory>
 #include <openssl/err.h>
 #include <openssl/evp.h>
-#include <openssl/obj_mac.h>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -88,7 +88,7 @@ public:
         std::vector<unsigned char> buff;
         std::copy(std::istreambuf_iterator<char>(inStream), std::istreambuf_iterator<char>(), std::back_inserter(buff));
 
-        auto md = EVP_get_digestbynid(NID_sha256);
+        auto md = EVP_sha256();
         if (!md) {
             auto opensslErr = getOpensslErrorDesc();
             throw std::runtime_error("failed to get digest by NID: " + std::to_string(NID_sha256) + ", " + opensslErr);
@@ -107,14 +107,14 @@ public:
             throw std::runtime_error("digest update failed, " + getOpensslErrorDesc());
         }
 
-        std::string mdValue(EVP_MAX_MD_SIZE, '\0');
+        std::array<unsigned char, EVP_MAX_MD_SIZE> mdValue;
         unsigned int mdLen;
 
         if (!EVP_DigestFinal_ex(mdCtxPtr.get(), reinterpret_cast<unsigned char *>(mdValue.data()), &mdLen)) {
             throw std::runtime_error("digest finalization failed, " + getOpensslErrorDesc());
         }
 
-        return convertToHex(mdValue);
+        return convertToHex(std::span(mdValue.data(), mdLen));
     }
 
 private:
@@ -170,7 +170,7 @@ private:
         return errBuff;
     }
 
-    std::string convertToHex(const std::string &data) const {
+    std::string convertToHex(std::span<unsigned char> data) const {
         std::ostringstream oss;
         oss << std::hex << std::setfill('0');
         for (unsigned int i = 0; i < data.size(); ++i) {
