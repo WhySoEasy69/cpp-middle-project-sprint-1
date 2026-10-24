@@ -62,7 +62,7 @@ using EvpMdCtxPtr = std::unique_ptr<EVP_MD_CTX, decltype([](EVP_MD_CTX *ctx) { E
 
 class CryptoGuardCtx::Impl {
 public:
-    Impl() : evpCtxPtr_(EVP_CIPHER_CTX_new()) {
+    Impl() : buffSizeForCrypto_(64 * 1024), evpCtxPtr_(EVP_CIPHER_CTX_new()) {
         if (!evpCtxPtr_) {
             throw std::runtime_error("failed to create EVP_CIPHER_CTX");
         }
@@ -81,17 +81,14 @@ public:
     }
 
     std::string CalculateChecksum(std::istream &inStream) const {
-        if (!inStream) {
+        if (!inStream.good()) {
             throw std::invalid_argument("invalid input stream argument");
         }
-
-        std::vector<unsigned char> buff;
-        std::copy(std::istreambuf_iterator<char>(inStream), std::istreambuf_iterator<char>(), std::back_inserter(buff));
 
         auto md = EVP_sha256();
         if (!md) {
             auto opensslErr = getOpensslErrorDesc();
-            throw std::runtime_error("failed to get digest by NID: " + std::to_string(NID_sha256) + ", " + opensslErr);
+            throw std::runtime_error("EVP_sha256 failed: " + opensslErr);
         }
 
         EvpMdCtxPtr mdCtxPtr(EVP_MD_CTX_new());
@@ -103,12 +100,18 @@ public:
             throw std::runtime_error("digest initialization failed, " + getOpensslErrorDesc());
         }
 
-        if (!EVP_DigestUpdate(mdCtxPtr.get(), buff.data(), buff.size())) {
-            throw std::runtime_error("digest update failed, " + getOpensslErrorDesc());
+        std::vector<unsigned char> buff(buffSizeForCrypto_);
+        while (inStream.good()) {
+            inStream.read(reinterpret_cast<char *>(buff.data()), buff.size());
+            const auto readCount = inStream.gcount();
+
+            if (!EVP_DigestUpdate(mdCtxPtr.get(), buff.data(), static_cast<size_t>(readCount))) {
+                throw std::runtime_error("digest update failed, " + getOpensslErrorDesc());
+            }
         }
 
         std::array<unsigned char, EVP_MAX_MD_SIZE> mdValue;
-        unsigned int mdLen;
+        unsigned int mdLen = 0;
 
         if (!EVP_DigestFinal_ex(mdCtxPtr.get(), reinterpret_cast<unsigned char *>(mdValue.data()), &mdLen)) {
             throw std::runtime_error("digest finalization failed, " + getOpensslErrorDesc());
@@ -136,15 +139,14 @@ private:
             EVP_CipherInit_ex(evpCtxPtr_.get(), params.cipher, nullptr, params.key.data(), params.iv.data(), enc);
         checkOpensslOpcode(opStr + " EVP_CipherInit_ex failed: ", opcode);
 
-        const auto buffSizeForCrypto = EVP_CIPHER_CTX_block_size(evpCtxPtr_.get());
+        std::vector<unsigned char> inBuf(buffSizeForCrypto_);
+        std::vector<unsigned char> outBuf(buffSizeForCrypto_ + EVP_MAX_BLOCK_LENGTH);
 
         while (inStream.good()) {
-            std::vector<unsigned char> inBuf(buffSizeForCrypto);
             inStream.read(reinterpret_cast<char *>(inBuf.data()), inBuf.size());
-            auto readCount = inStream.gcount();
+            const auto readCount = inStream.gcount();
 
-            std::vector<unsigned char> outBuf(inBuf.size() + EVP_MAX_BLOCK_LENGTH);
-            int outLen;
+            int outLen = 0;
 
             opcode =
                 EVP_CipherUpdate(evpCtxPtr_.get(), outBuf.data(), &outLen, inBuf.data(), static_cast<int>(readCount));
@@ -153,13 +155,14 @@ private:
             std::copy(outBuf.begin(), std::next(outBuf.begin(), outLen), std::ostreambuf_iterator<char>(outStream));
         }
 
-        std::vector<unsigned char> outBuf(EVP_MAX_BLOCK_LENGTH);
-        int finalLen;
+        std::vector<unsigned char> finalOutBuf(EVP_MAX_BLOCK_LENGTH);
+        int finalLen = 0;
 
-        opcode = EVP_CipherFinal_ex(evpCtxPtr_.get(), outBuf.data(), &finalLen);
+        opcode = EVP_CipherFinal_ex(evpCtxPtr_.get(), finalOutBuf.data(), &finalLen);
         checkOpensslOpcode(opStr + " EVP_CipherFinal_ex failed: ", opcode);
 
-        std::copy(outBuf.begin(), std::next(outBuf.begin(), finalLen), std::ostreambuf_iterator<char>(outStream));
+        std::copy(finalOutBuf.begin(), std::next(finalOutBuf.begin(), finalLen),
+                  std::ostreambuf_iterator<char>(outStream));
     }
 
     void checkOpensslOpcode(const std::string &errContextInfo, int opcode) const {
@@ -185,6 +188,7 @@ private:
     }
 
 private:
+    const size_t buffSizeForCrypto_;
     EvpCipherCtxPtr evpCtxPtr_;
 };
 
